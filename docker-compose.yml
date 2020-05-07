@@ -1,0 +1,67 @@
+version: "2"
+
+volumes:
+  mydata:
+
+services:
+
+  mongo:
+    image: mongo:latest
+    volumes:
+      - mydata:/data/db
+
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    links:
+      - mongo
+    command:
+      - /bin/sh
+      - -c
+      - |
+        echo "Starting server..."
+        yaml_cli -f src/main/resources/application.yml -s my-surfconext-url "${SCHEME}://${HOST}:${PORT_SP}"
+        yaml_cli -f src/main/resources/application.yml -s sp_redirect_url "${SCHEME}://${HOST}:${PORT_SP}"
+        yaml_cli -f src/main/resources/application.yml -s idp_redirect_url "${SCHEME}://${HOST}:${PORT_IDP}"
+        yaml_cli -f src/main/resources/application.yml -s mongodb_db "${DB_NAME}"
+        yaml_cli -f src/main/resources/application.yml -s spring:data:mongodb:uri mongodb://mongo:27017/"${DB_NAME}"
+        mvn spring-boot:run -Drun.jvmArguments="-Dspring.profiles.active=dev"
+
+  account:
+    build:
+      context: .
+      dockerfile: Dockerfile.client
+      args:
+        CLIENT: 'account-gui'
+    ports:
+      - ${PORT_IDP}:80
+    depends_on:
+      - server
+
+  gui:
+    build:
+      context: .
+      dockerfile: Dockerfile.client
+      args:
+        CLIENT: 'eduid-gui'
+    ports:
+      - ${PORT_SP}:80
+    depends_on:
+      - server
+    command:
+      - /bin/sh
+      - -c
+      - |
+        tee /usr/share/nginx/html/config > /dev/null <<EOT
+        {
+          "eduIDLoginUrl":"${SCHEME}://${HOST}:${PORT_IDP}/Shibboleth.sso/Login?entityID=${SCHEME}://${HOST}:${PORT_SP}",
+          "baseDomain":"${HOST}",
+          "eduIDRegisterUrl":"${SCHEME}://${HOST}:${PORT_SP}/register",
+          "loginUrl":"${SCHEME}://${HOST}:${PORT_SP}/login",
+          "migrationUrl":"${SCHEME}://${HOST}:${PORT_IDP}/Shibboleth.sso/Login?entityID=http://mock-idp&target=/migration",
+          "domain":"${HOST}",
+          "magicLinkUrl":"${SCHEME}://${HOST}:${PORT_SP}/saml/guest-idp/magic"
+        }
+        EOT
+        nginx -g "daemon off;"

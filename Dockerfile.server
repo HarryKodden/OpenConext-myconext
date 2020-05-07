@@ -1,0 +1,31 @@
+FROM ubuntu:18.04
+
+MAINTAINER harry.kodden@surfnet.nl
+
+RUN apt-get update
+RUN apt-get install -y openjdk-8-jdk
+RUN apt-get install -y wget git python-pip
+
+WORKDIR /opt
+
+RUN git clone https://github.com/Gallore/yaml_cli
+RUN cd yaml_cli && pip install .
+
+ENV MAVEN_VERSION=3.6.3
+RUN wget https://www-us.apache.org/dist/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz
+RUN tar -xzf apache-maven-${MAVEN_VERSION}-bin.tar.gz
+RUN mv apache-maven-${MAVEN_VERSION} maven
+
+ENV JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
+ENV M2_HOME=/opt/maven
+ENV PATH=${M2_HOME}/bin:${PATH}
+
+RUN mvn --version
+
+ADD . /opt/product
+
+WORKDIR /opt/product/myconext-server
+
+RUN mvn install -DskipTests=true -Dmaven.javadoc.skip=true -B -V
+
+CMD ["bash"]

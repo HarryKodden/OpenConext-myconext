@@ -1,0 +1,20 @@
+FROM node:8 as build-deps
+
+MAINTAINER harry.kodden@surfnet.nl
+
+ARG CLIENT
+
+ADD ./${CLIENT} /opt/app
+
+WORKDIR /opt/app
+
+RUN yarn
+RUN npm update
+RUN npm audit fix
+RUN yarn build
+
+FROM nginx:1.12-alpine
+COPY --from=build-deps /opt/app/public /usr/share/nginx/html
+
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
